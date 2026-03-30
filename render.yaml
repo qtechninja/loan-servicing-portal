@@ -1,8 +1,8 @@
 services:
-  # ── Backend API (Staging) ──────────────────────────────────────
+  # Staging — Node.js API
   - type: web
-    name: loan-servicing-portal-api-staging
-    runtime: node
+    name: loan-servicing-api-staging
+    env: node
     region: oregon
     plan: starter
     branch: main
@@ -30,12 +30,29 @@ services:
       - key: SENDGRID_API_KEY
         sync: false
 
-  # ── Backend API (Production) ───────────────────────────────────
+  # Staging — React Frontend
   - type: web
-    name: loan-servicing-portal-api
-    runtime: node
+    name: loan-servicing-web-staging
+    env: static
     region: oregon
-    plan: starter
+    branch: main
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: build
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://loan-servicing-api-staging.onrender.com
+      - key: REACT_APP_SUPABASE_URL
+        sync: false
+      - key: REACT_APP_SUPABASE_ANON_KEY
+        sync: false
+
+  # Production — Node.js API
+  - type: web
+    name: loan-servicing-api
+    env: node
+    region: oregon
+    plan: standard
     branch: main
     rootDir: backend
     buildCommand: npm ci
@@ -61,28 +78,19 @@ services:
       - key: SENDGRID_API_KEY
         sync: false
 
-  # ── React Frontend (Staging) ───────────────────────────────────
-  - type: static
-    name: loan-servicing-portal-web-staging
+  # Production — React Frontend
+  - type: web
+    name: loan-servicing-web
+    env: static
+    region: oregon
     branch: main
     rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: build
     envVars:
       - key: REACT_APP_API_URL
-        value: https://loan-servicing-portal-api-staging.onrender.com
-      - key: REACT_APP_ENV
-        value: staging
-
-  # ── React Frontend (Production) ────────────────────────────────
-  - type: static
-    name: loan-servicing-portal-web
-    branch: main
-    rootDir: frontend
-    buildCommand: npm ci && npm run build
-    staticPublishPath: build
-    envVars:
-      - key: REACT_APP_API_URL
-        value: https://loan-servicing-portal-api.onrender.com
-      - key: REACT_APP_ENV
-        value: production
+        value: https://loan-servicing-api.onrender.com
+      - key: REACT_APP_SUPABASE_URL
+        sync: false
+      - key: REACT_APP_SUPABASE_ANON_KEY
+        sync: false
