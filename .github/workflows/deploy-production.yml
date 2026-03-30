@@ -1,0 +1,79 @@
+name: Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  deploy-api-production:
+    name: Deploy API → Production
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Trigger Render production API deploy
+        run: |
+          curl -s -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_PROD_API_SERVICE_ID }}/deploys" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+
+      - name: Wait for production API deploy
+        run: |
+          SERVICE_ID="${{ secrets.RENDER_PROD_API_SERVICE_ID }}"
+          MAX_WAIT=600
+          ELAPSED=0
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            STATUS=$(curl -s -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+              "https://api.render.com/v1/services/${SERVICE_ID}/deploys?limit=1" | \
+              python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['deploy']['status'])" 2>/dev/null)
+            echo "Deploy status: $STATUS (${ELAPSED}s)"
+            if [ "$STATUS" = "live" ]; then echo "Production deploy succeeded!"; exit 0; fi
+            if [ "$STATUS" = "failed" ] || [ "$STATUS" = "canceled" ]; then echo "Production deploy FAILED"; exit 1; fi
+            sleep 20
+            ELAPSED=$((ELAPSED + 20))
+          done
+          echo "Timed out"; exit 1
+
+  deploy-web-production:
+    name: Deploy Frontend → Production
+    runs-on: ubuntu-latest
+    environment: production
+    needs: [deploy-api-production]
+    steps:
+      - name: Trigger Render production frontend deploy
+        run: |
+          curl -s -f -X POST \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_PROD_WEB_SERVICE_ID }}/deploys" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+
+      - name: Wait for frontend deploy
+        run: |
+          SERVICE_ID="${{ secrets.RENDER_PROD_WEB_SERVICE_ID }}"
+          MAX_WAIT=300
+          ELAPSED=0
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            STATUS=$(curl -s -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+              "https://api.render.com/v1/services/${SERVICE_ID}/deploys?limit=1" | \
+              python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['deploy']['status'])" 2>/dev/null)
+            echo "Frontend status: $STATUS (${ELAPSED}s)"
+            if [ "$STATUS" = "live" ]; then echo "Production frontend deploy succeeded!"; exit 0; fi
+            if [ "$STATUS" = "failed" ] || [ "$STATUS" = "canceled" ]; then echo "FAILED"; exit 1; fi
+            sleep 20
+            ELAPSED=$((ELAPSED + 20))
+          done
+          exit 1
+
+  health-check-production:
+    name: Production Health Check
+    runs-on: ubuntu-latest
+    needs: [deploy-api-production]
+    steps:
+      - name: Verify production API health
+        run: |
+          sleep 15
+          curl -f https://loan-servicing-api.onrender.com/health || exit 1
+          echo "Production API is healthy ✓"
