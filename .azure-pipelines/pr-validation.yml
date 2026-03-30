@@ -1,0 +1,60 @@
+# PR Validation Pipeline — Loan Servicing Portal
+# Runs on every PR to main or develop.
+# Gates: lint → unit tests → build check (all must pass before merge).
+
+trigger: none
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  NODE_VERSION: '20.x'
+  npm_config_cache: $(Pipeline.Workspace)/.npm
+
+stages:
+  - stage: Validate
+    displayName: 'PR Validation'
+    jobs:
+      - job: LintAndTest
+        displayName: 'Lint + Unit Tests'
+        timeoutInMinutes: 10
+        steps:
+          - task: NodeTool@0
+            displayName: 'Use Node.js $(NODE_VERSION)'
+            inputs:
+              versionSpec: '$(NODE_VERSION)'
+
+          - task: Cache@2
+            displayName: 'Cache npm packages'
+            inputs:
+              key: 'npm | "$(Agent.OS)" | backend/package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+              path: $(npm_config_cache)
+
+          - script: cd backend && npm ci
+            displayName: 'Install dependencies'
+
+          - script: cd backend && npm run lint
+            displayName: 'ESLint check'
+
+          - script: cd backend && npm test -- --reporter=verbose
+            displayName: 'Run unit tests (Vitest)'
+            env:
+              NODE_ENV: test
+              DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+              JWT_SECRET: test-secret-that-is-long-enough-32-chars
+              JWT_ACCESS_EXPIRY: 15m
+              JWT_REFRESH_EXPIRY: 7d
+              LOG_LEVEL: error
+              PORT: '3001'
+              API_PREFIX: /api/v1
+
+          - script: cd backend && npm run build
+            displayName: 'TypeScript build check'
