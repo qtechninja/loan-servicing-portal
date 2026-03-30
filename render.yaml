@@ -1,5 +1,5 @@
 services:
-  # Staging — Node.js API
+  # ─── Backend API — Staging ───────────────────────────────────────────────────
   - type: web
     name: loan-servicing-api-staging
     env: node
@@ -7,9 +7,9 @@ services:
     plan: starter
     branch: main
     rootDir: backend
-    buildCommand: npm ci
-    startCommand: node src/index.js
-    healthCheckPath: /health
+    buildCommand: npm ci && npm run build
+    startCommand: node dist/server.js
+    healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
         value: staging
@@ -23,14 +23,20 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      - key: JWT_ACCESS_EXPIRY
+        value: 15m
+      - key: JWT_REFRESH_EXPIRY
+        value: 7d
       - key: USIO_ACH_API_KEY
         sync: false
       - key: USIO_ACH_BASE_URL
         sync: false
       - key: SENDGRID_API_KEY
         sync: false
+      - key: LOG_LEVEL
+        value: debug
 
-  # Staging — React Frontend
+  # ─── Frontend — Staging ───────────────────────────────────────────────────────
   - type: web
     name: loan-servicing-web-staging
     env: static
@@ -47,7 +53,7 @@ services:
       - key: REACT_APP_SUPABASE_ANON_KEY
         sync: false
 
-  # Production — Node.js API
+  # ─── Backend API — Production ────────────────────────────────────────────────
   - type: web
     name: loan-servicing-api
     env: node
@@ -55,9 +61,9 @@ services:
     plan: standard
     branch: main
     rootDir: backend
-    buildCommand: npm ci
-    startCommand: node src/index.js
-    healthCheckPath: /health
+    buildCommand: npm ci && npm run build
+    startCommand: node dist/server.js
+    healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
         value: production
@@ -71,14 +77,20 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      - key: JWT_ACCESS_EXPIRY
+        value: 15m
+      - key: JWT_REFRESH_EXPIRY
+        value: 7d
       - key: USIO_ACH_API_KEY
         sync: false
       - key: USIO_ACH_BASE_URL
         sync: false
       - key: SENDGRID_API_KEY
         sync: false
+      - key: LOG_LEVEL
+        value: info
 
-  # Production — React Frontend
+  # ─── Frontend — Production ────────────────────────────────────────────────────
   - type: web
     name: loan-servicing-web
     env: static
@@ -94,3 +106,92 @@ services:
         sync: false
       - key: REACT_APP_SUPABASE_ANON_KEY
         sync: false
+
+  # ─── T17 Cron Jobs (Sprint 2) ─────────────────────────────────────────────────
+  # Same backend image, different entrypoint per job
+
+  - type: cron
+    name: loan-overdue-marker
+    env: node
+    region: oregon
+    plan: starter
+    branch: main
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    schedule: "0 1 * * *"   # daily 01:00 UTC
+    startCommand: node dist/jobs/overdue-marker.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+
+  - type: cron
+    name: loan-auto-debit-trigger
+    env: node
+    region: oregon
+    plan: starter
+    branch: main
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    schedule: "30 6 * * *"  # daily 06:30 UTC
+    startCommand: node dist/jobs/auto-debit-trigger.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: USIO_ACH_API_KEY
+        sync: false
+      - key: USIO_ACH_BASE_URL
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+
+  - type: cron
+    name: loan-statement-generator
+    env: node
+    region: oregon
+    plan: starter
+    branch: main
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    schedule: "0 3 1 * *"  # 1st of every month, 03:00 UTC
+    startCommand: node dist/jobs/statement-generator.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+
+  - type: cron
+    name: loan-collection-escalation
+    env: node
+    region: oregon
+    plan: starter
+    branch: main
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    schedule: "0 9 * * 1"  # every Monday 09:00 UTC
+    startCommand: node dist/jobs/collection-escalation.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: info
